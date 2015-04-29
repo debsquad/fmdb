@@ -279,8 +279,8 @@ if __name__ == "__main__":
             #if val is None:
             #    val = datetime.date(year, month, day)
             if len(val) == 10:                      # ISOFORMAT YYYY-mm-dd
-                val = datetime.date(int(val[0:4]), int(val[5:7], int(val[8:]))
-            if len(val) == 8:                          # format YYYYmmdd
+                val = datetime.date(int(val[0:4]), int(val[5:7]), int(val[8:]))
+            elif len(val) == 8:                          # format YYYYmmdd
                 val = datetime.date(int(val[0:4]), int(val[4:6]), int(val[6:]))
             elif len(val) == 6:                          # format YYmmdd
                 val = datetime.date(int("20"+str(val[0:2])), int(val[2:4]), 
