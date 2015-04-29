@@ -253,7 +253,7 @@ if __name__ == "__main__":
                         help="title of the film.")
         parser.add_option("-d", "--dateview",
                         action="store", type="string", dest="dateview",
-                        help="Date of view ; format [[[YY]yy]mm]dd")
+                        help="Date of view ; format [[[YY]yy][-]mm][-]dd")
         parser.add_option("-n", "--note",
                         action="store", type="float", dest="note",
                         help="Note given to film (scale 0-10)")
@@ -278,6 +278,8 @@ if __name__ == "__main__":
             day = datetime.date.today().day
             #if val is None:
             #    val = datetime.date(year, month, day)
+            if len(val) == 10:                      # ISOFORMAT YYYY-mm-dd
+                val = datetime.date(int(val[0:4]), int(val[5:7], int(val[8:]))
             if len(val) == 8:                          # format YYYYmmdd
                 val = datetime.date(int(val[0:4]), int(val[4:6]), int(val[6:]))
             elif len(val) == 6:                          # format YYmmdd
