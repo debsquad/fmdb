@@ -35,6 +35,15 @@ rc_file = ".franckdbrc"
 
 confparser.read(os.path.join(home, rc_file))
 
+### For adding film to your remind calendar
+try:
+    remind = confparser.get("fmdb", "remind")
+    reminder_file = os.path.join(home, remind)
+except ConfigParser.NoOptionError:
+    remind = None
+
+#db_location = os.path.join(home, ".fmdb.sql")
+#db_url = "sqlite:///{}".format(db_location)
 db_url = confparser.get("fmdb", "url")
 browser = confparser.get("fmdb", "browser")
 
@@ -95,10 +104,10 @@ class AddFilmCommand():
         if akas_list:
             for elem in akas_list:
                 if b:
-                    country = elem.contents
+                    country = elem.string
                     b = False
                 else:
-                    title_list.append( (country, elem.contents) )
+                    title_list.append( (country, elem.string) )
                     b = True
         return title_list
 
@@ -158,6 +167,17 @@ class AddFilmCommand():
                                         ).first()
         print("added {} in Film database".format(title_added.title.encode(
                                                                     "utf_8")))
+
+        if remind:
+            reminder = "rem {} {} {} msg %\"{}: {}%\"".format(
+                                        options.dateview.year,
+                                        options.dateview.month,
+                                        options.dateview.day,
+                                        options.imdbtt,
+                                        title_added.title.encode("utf_8"))
+            with open(reminder_file, 'a') as f:
+                f.write(reminder)
+
         return True
 
 class FindFilmCommand():
