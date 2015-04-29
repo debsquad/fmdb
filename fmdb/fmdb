@@ -2,6 +2,7 @@
 #
 # fmdb : franck movie database
 
+import pdb
 import datetime
 import os
 import sys
@@ -84,7 +85,7 @@ class AddFilmCommand():
 
     def _get_imdb_title_list(self, soup, imdbakas):
         imdbtitle = soup.head.title.string.split(" - ")[0].rsplit(" ", 1)[0]
-        title_list = [ (soup.head.title.string.split(" - ")[1], imdbtitle) ]
+        title_list = [ ( "Release Info" , imdbtitle) ]
         b = True
         country = ""
         try:
@@ -103,11 +104,11 @@ class AddFilmCommand():
 
     def _get_imdb_year(self, soup):
         try:
-            imdbyear = soup.head.title.string.split(" - ")[0].rsplit(
-                                                " ", 1)[1].split(
-                                                "(")[1].split(")")[0]
+            imdbyear = soup.head.title.string.split(") - Release")[0].rsplit(
+                                                    " ", 1)[1].split("(")[1]
         except IndexError:
-            pass #TODO
+            imdbyear = soup.head.title.string.split(") - Release")[0].rsplit(
+                                                                    " ", 1)[1]
         return imdbyear
 
     def run(self, session, options):
@@ -125,9 +126,7 @@ class AddFilmCommand():
         
         valuesfilmakaslist = []
         query = session.query(FilmAkas)
-        try:
-            query.filter(FilmAkas.imdbtt == options.imdbtt).one()
-        except sqlalchemy.orm.exc.NoResultFound:    
+        if not query.filter(FilmAkas.imdbtt == options.imdbtt).first():
             title_list = self._get_imdb_title_list(soup, imdbakas)
             for country, title in title_list:
                 valuesfilmakaslist.append( {
@@ -156,7 +155,7 @@ class AddFilmCommand():
                                         FilmAkas.imdbtt == options.imdbtt
                                         ).filter(
                                         FilmAkas.country == "Release Info"
-                                        ).one()
+                                        ).first()
         print("added {} in Film database".format(title_added.title.encode(
                                                                     "utf_8")))
         return True
@@ -206,7 +205,7 @@ class FindFilmCommand():
                                         FilmAkas.imdbtt == u.imdbtt
                                         ).filter(
                                         FilmAkas.country == "Release Info"
-                                        ).one()
+                                        ).first()
             if mod_pt:
                 pt.add_row([u.imdbtt.encode("utf_8"),
                             title.title.encode("utf_8"),
@@ -396,4 +395,7 @@ if __name__ == "__main__":
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    cmd.run(session, options)
+    try:
+        cmd.run(session, options)
+    except KeyboardInterrupt:
+        sys.exit(1)
