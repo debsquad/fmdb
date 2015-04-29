@@ -146,6 +146,13 @@ class AddFilmCommand():
         except sqlalchemy.exc.IntegrityError:
             print("error while adding film title akas")
             return False
+        title_added = session.query(FilmAkas).filter(
+                                        FilmAkas.imdbtt == options.imdbtt
+                                        ).filter(
+                                        FilmAkas.country == "Release Info"
+                                        ).one()
+        print("added {} in Film database".format(title_added.title))
+                    
         return True
 
 class FindFilmCommand():
@@ -154,7 +161,6 @@ class FindFilmCommand():
     Should be able to launch in browser specified in configparser
     the imdb entry on internet
     """
-    #TODO : return "original title" or user-defined title
     __command_name__ = "find"
     def run(self, session, options):
         query = session.query(Film)
