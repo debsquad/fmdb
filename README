@@ -2,7 +2,7 @@ fmdb
 
 
 fmdb is a little tool to handle a database of film watched, or ToWatch
-It requires BeautifulSoup, sqlalchemy, and requests ; prettytables is optionnal
+It requires bs4, sqlalchemy, and requests ; prettytables is optionnal
 
 It records :
 imdb_title_code | year release |  date_of_view | note you give | comments | date_of_insert_in_database | Seen or Unseen
