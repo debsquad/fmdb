@@ -1,0 +1,385 @@
+#!/usr/bin/env python
+#
+# fmdb : franck movie database
+
+import datetime
+import os
+import sys
+import re
+
+import ConfigParser
+
+import sqlalchemy
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Float, Date, Boolean 
+from sqlalchemy import ForeignKey
+
+import requests
+from bs4 import BeautifulSoup, SoupStrainer
+
+from optparse import OptionParser
+
+try:
+    from prettytable import PrettyTable
+    mod_pt = True
+except ImportError:
+    mod_pt = False
+    pass
+
+confparser = ConfigParser.ConfigParser()
+home = os.path.expanduser("~")
+rc_file = ".franckdbrc"
+
+confparser.read(os.path.join(home, rc_file))
+
+db_url = confparser.get("fmdb", "url")
+browser = confparser.get("fmdb", "browser")
+
+Base = declarative_base()
+
+class Film(Base):
+    """ 
+        A Film has :
+        imdb code entry : tt1234567
+        was seen by user on Date
+        As a note on a scale of 10 ; default 5
+        May has commentary from user
+    """
+    __tablename__="film"
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(Date, default=datetime.date.today())
+    imdbtt = Column(String, nullable=False)
+    year = Column(Integer)
+    dateview = Column(Date, default=datetime.date.today())
+    note = Column(Float, default=5)
+    comment = Column(String, default="")
+    seen = Column(Boolean, default=True)
+
+class FilmAkas(Base):
+    """ 
+        FilmAkas is, for now, only titles on imdb.
+        This table is for user be able to query the fmdb
+        by a title instead of browsing by imdb code.
+        Data is fetch from imdb, but user may specify is own title
+        while adding a movie.
+    """
+        
+    __tablename__="film_akas"
+    id = Column(Integer, primary_key=True)
+    imdbtt = Column(String, nullable=False)
+    title = Column(String, default="")
+    country = Column(String, default="")
+
+class AddFilmCommand():
+    __command_name__ = "add"
+    
+    def _get_imdb_title_soup(self, imdbtt):
+        r = requests.get("http://www.imdb.com/title/{}/releaseinfo".format(
+                                                                    imdbtt))
+        soup = BeautifulSoup(r.text)
+        imdbakas = SoupStrainer("table", id="akas")
+        return soup, imdbakas
+
+    def _get_imdb_title_list(self, soup, imdbakas):
+        imdbtitle = soup.head.title.string.split(" - ")[0].rsplit(" ", 1)[0]
+        title_list = [ (soup.head.title.string.split(" - ")[1], imdbtitle) ]
+        b = True
+        country = ""
+        akas_list = soup.find(imdbakas).find_all("td")
+        if akas_list:
+            for elem in akas_list:
+                if b:
+                    country = elem.contents
+                    b = False
+                else:
+                    title_list.append( (country, elem.contents) )
+                    b = True
+        return title_list
+
+    def _get_imdb_year(self, soup):
+        imdbyear = soup.head.title.string.split(" - ")[0].rsplit(
+                                                " ", 1)[1].split(
+                                                "(")[1].split(")")[0]
+        return imdbyear
+
+    def run(self, session, options):
+        soup, imdbakas = self._get_imdb_title_soup(options.imdbtt)
+        imdbyear = self._get_imdb_year(soup)
+
+        valuesfilm = {
+            "imdbtt": options.imdbtt,
+            "year": imdbyear,
+            "dateview": options.dateview,
+            "note": options.note,
+            "comment": options.comment,
+            "seen": options.seen,
+            }
+        
+        valuesfilmakaslist = []
+        query = session.query(FilmAkas)
+        try:
+            query.filter(FilmAkas.imdbtt == options.imdbtt).one()
+        except sqlalchemy.orm.exc.NoResultFound:    
+            title_list = self._get_imdb_title_list(soup, imdbakas)
+            for country, title in title_list:
+                valuesfilmakaslist.append( {
+                    "imdbtt": options.imdbtt,
+                    "title": title,
+                    "country": country
+                    } )
+
+        try:
+            new_entry = Film(**valuesfilm)
+            session.add(new_entry)
+            session.commit()
+        except sqlalchemy.exc.IntegrityError:
+            print("error while adding film")
+            return False
+        try:
+            if valuesfilmakaslist:
+                for valuesfilmaka in valuesfilmakaslist:
+                    new_entry = FilmAkas(**valuesfilmaka)
+                    session.add(new_entry)
+                session.commit()
+        except sqlalchemy.exc.IntegrityError:
+            print("error while adding film title akas")
+            return False
+        return True
+
+class FindFilmCommand():
+    """
+    Print list of films
+    Should be able to launch in browser specified in configparser
+    the imdb entry on internet
+    """
+    #TODO : return "original title" or user-defined title
+    __command_name__ = "find"
+    def run(self, session, options):
+        query = session.query(Film)
+        if options.imdbtt:
+            query = query.filter(Film.imdbtt == options.imdbtt)
+        if not options.seen:
+            query = query.filter(Film.seen == False)
+        if options.title:
+            for keyword in options.title:
+                keyword="%{}%".format(keyword)
+                query = query.filter(
+                            FilmAkas.imdbtt == Film.imdbtt
+                            ).filter(
+                            FilmAkas.title.ilike(keyword))
+        if options.nst:
+            query = query.filter(Film.note >= options.nst)
+        if options.nit:
+            query = query.filter(Film.note <= options.nit)
+        if options.note:
+            query = query.filter(Film.note == options.note)
+        if options.dateview:
+            query = query.filter(Film.dateview == options.dateview)
+        if options.year:
+            query = query.filter(Film.year == options.year)
+        if options.fot:
+            query = query.filter(Film.year <= options.fot)
+        if options.fyt:
+            query = query.filter(Film.year >= options.fyt)
+        
+        query = query.order_by(Film.note)
+        query = query.all()
+        if mod_pt:
+            pt = PrettyTable(["imdb tt", "title", "year", "dateview",
+                            "note", "comment", "seen"])
+        for u in query:
+            title = session.query(FilmAkas).filter(
+                                        FilmAkas.imdbtt == u.imdbtt
+                                        ).filter(
+                                        FilmAkas.country == "Release Info"
+                                        ).one()
+            if mod_pt:
+                pt.add_row([u.imdbtt.encode("utf_8"),
+                            title.title.encode("utf_8"),
+                            u.year, u.dateview, u.note,
+                            u.comment.encode("utf_8"), u.seen])
+            
+            else:
+                print("{} ; {} ; {} ; {} ; {} ; {} ; {}".format(
+                                                u.imdbtt.encode("utf_8"), 
+                                                title.title.encode("utf_8"),
+                                                u.year, 
+                                                u.dateview, 
+                                                u.note, 
+                                                u.comment.encode("utf_8"),
+                                                u.seen))
+        if mod_pt:
+            print(pt)
+
+
+if __name__ == "__main__":
+
+    def parse_args(command_name, args):
+        """
+        """
+        #def add_args():
+        #    pass
+
+        def find_args():
+            parser.add_option("--nst", "--note-sup-than",
+                            action="store", type="float", dest="nst",
+                            help="sort only films with note sup or equal to...")
+            parser.add_option("--nit", "--note-inf-than",
+                            action="store", type="float", dest="nit",
+                            help="sort only films with note inf or equal to...")
+            parser.add_option("-y", "--year",
+                            action="store", type="int", dest="year",
+                            help="Film's year release")
+            parser.add_option("--fot", "--film-older-than",
+                            action="store", type="int", dest="fot",
+                            help="Film's release date older or equal to year")
+            parser.add_option("--fyt", "--film-younger-than",
+                            action="store", type="int", dest="fyt",
+                            help="Film's release date younger or equal to year")
+
+        parser = OptionParser(usage="%prog {}".format(command_name))
+        #if command_name == "add":
+        #    add_args()
+
+        if command_name == "find":
+            find_args()
+        parser.add_option("-i", "--imdbtt",
+                        action="store", type="string", dest="imdbtt",
+                        help="Imdb title (tt) ; form : tt1234567")
+        parser.add_option("-t", "--title",
+                        action="store", type="string", dest="title",
+                        help="title of the film.")
+        parser.add_option("-d", "--dateview",
+                        action="store", type="string", dest="dateview",
+                        help="Date of view ; format [[[YY]yy]mm]dd")
+        parser.add_option("-n", "--note",
+                        action="store", type="float", dest="note",
+                        help="Note given to film (scale 0-10)")
+        parser.add_option("-c", "--comment",
+                        action="store", type="string", dest="comment",
+                        help="Comments about the film")
+        parser.add_option("-S", "--seen",
+                        action="store_true", dest="seen", default=True,
+                        help="Film already seen ; default action")
+        parser.add_option("-U", "--unseen",
+                        action="store_false", dest="seen", default=True,
+                        help="Film on ToWatch List :)")
+        (options, args) = parser.parse_args(args)
+        return options, args
+
+    def process_userinput(ui):
+        def _check_date(val):
+            """ Return datetime.date() """
+            msg = "Date must be in format [[[YY]yy]mm]dd ; date of view default to today."
+            year = datetime.date.today().year
+            month = datetime.date.today().month
+            day = datetime.date.today().day
+            #if val is None:
+            #    val = datetime.date(year, month, day)
+            if len(val) == 8:                          # format YYYYmmdd
+                val = datetime.date(int(val[0:4]), int(val[4:6]), int(val[6:]))
+            elif len(val) == 6:                          # format YYmmdd
+                val = datetime.date(int("20"+str(val[0:2])), int(val[2:4]), 
+                                                                int(val[4:]))
+            elif len(val) == 4:                          # format mmdd
+                val = datetime.date(year, int(val[0:2]), int(val[2:]))
+            elif len(val) == 2:                          # format dd
+                val = datetime.date(year, month, int(val[0:]))
+            else:
+                val= datetime.date(year, manth, day)
+
+            return val
+                    
+        try:
+            if ui.imdbtt:
+                if re.match(r"tt\d{7}", ui.imdbtt):
+                    ui.imdbtt = ui.imdbtt.decode("utf_8")
+                else:
+                    print("imdb entry must be of type : tt1234567")
+                    sys.exit(18)
+        except AttributeError:
+            if command_name == "add":
+                print("To add in the database, a imdb entrance is needed")
+                sys.exit(17)
+            pass
+        try:
+            if ui.dateview:
+                ui.dateview = _check_date(ui.dateview)
+        except AttributeError:
+            #if command_name == "add"
+            #    ui.dateview = _check_date()
+            #else:
+            ui.dateview = None
+        try:
+            if ui.note:
+                float(ui.note)
+        except AttributeError:
+            ui.note = None
+        try:
+            if ui.comment:
+                ui.comment = ui.comment.decode("utf_8")
+        except AttributeError:
+            ui.comment = None
+        try:
+            if ui.title:
+                ui.title = ui.title.decode("utf_8")
+        except AttributeError:
+            ui.title = None
+        try:
+            if ui.nst:
+                ui.nst = float(ui.nst)
+        except AttributeError:
+            ui.nst = None
+        try:
+            if ui.nit:
+                ui.nit = float(ui.nit)
+        except AttributeError:
+            ui.nit = None
+        try:
+            if ui.year:
+                ui.year = int(ui.year)
+        except AttributeError:
+            ui.year = None
+        try:
+            if ui.fot:
+                ui.fot = int(ui.fot)
+        except AttributeError:
+            ui.fot = None
+        try:
+            if ui.fyt:
+                ui.fyt = int(ui.fyt)
+        except AttributeError:
+            ui.fyt = None
+
+        return ui
+
+
+
+    try:
+        command_name = sys.argv[1]
+        commands = {
+            "add": AddFilmCommand,
+            "find": FindFilmCommand,
+            }
+        try:
+            Command = commands[command_name]
+        except KeyError:
+            print("Usage: fmdb [add find]")
+            sys.exit(16)
+        cmd = Command()
+    except IndexError:
+        print("Usage: fmdb [add find]")
+        sys.exit(15)
+
+    args = sys.argv[2:]
+    (options, args) = parse_args(command_name, args)
+    options = process_userinput(options)
+
+    engine = create_engine(db_url, echo=False, convert_unicode=True)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    cmd.run(session, options)
