@@ -1,11 +1,11 @@
 fmdb
 
 
-fmdb is a little tool to handle a database of film watched.
+fmdb is a little tool to handle a database of film watched, or ToWatch
 It requires BeautifulSoup, sqlalchemy, and requests ; prettytables is optionnal
 
 It records :
-imdb_title_code  |  date_of_view | note you give | comments | date_of_insert_in_database 
+imdb_title_code | year release |  date_of_view | note you give | comments | date_of_insert_in_database | Seen or Unseen
 
 and gets automagically on imdb the titles of the films, for a convenient search later.
 
@@ -24,9 +24,12 @@ fmdb add -i tt1234567 [-t "your own title"] [-d YYYYmmdd] [-n x.x] [-c ""]
 	-d : date of watch
 	-n : note, on a scale from 0 to 10
 	-c : comments
+	-S : seen
+	-U : unseen   (default : film seen)
 
 find a film in database :
 fmdb find [-t title] [-i tt1234567] [-d YYYYmmdd] [-n x.x] [--note-sup-than x.x] [--note_inf_than x.x]
+			[ --film-older-than YYYY ] [ --film-younger-than YYYY]
 	
 will print on your screen, and eventually open the imdb_entry on your browser.
 
