@@ -2,7 +2,7 @@
 #
 # fmdb : franck movie database
 
-import pdb
+#import pdb
 import datetime
 import os
 import sys
@@ -132,7 +132,6 @@ class AddFilmCommand():
             "comment": options.comment,
             "seen": options.seen,
             }
-        
         valuesfilmakaslist = []
         query = session.query(FilmAkas)
         if not query.filter(FilmAkas.imdbtt == options.imdbtt).first():
@@ -169,10 +168,8 @@ class AddFilmCommand():
                                                                     "utf_8")))
 
         if reminder_file:
-            reminder = "rem {} {} {} msg %\"{} ({}): {}%\"\n".format(
-                                        options.dateview.year,
-                                        options.dateview.month,
-                                        options.dateview.day,
+            reminder = "rem {} msg %\"{} ({}): {}%\"\n".format(
+                                        options.dateview.isoformat(),
                                         title_added.title.encode("utf_8"),
                                         imdbyear,
                                         options.imdbtt)
