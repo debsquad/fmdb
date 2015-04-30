@@ -40,7 +40,7 @@ try:
     remind = confparser.get("fmdb", "remind")
     reminder_file = os.path.join(home, remind)
 except ConfigParser.NoOptionError:
-    remind = None
+    reminder_file = None
 
 #db_location = os.path.join(home, ".fmdb.sql")
 #db_url = "sqlite:///{}".format(db_location)
@@ -168,13 +168,14 @@ class AddFilmCommand():
         print("added {} in Film database".format(title_added.title.encode(
                                                                     "utf_8")))
 
-        if remind:
-            reminder = "rem {} {} {} msg %\"{}: {}%\"".format(
+        if reminder_file:
+            reminder = "rem {} {} {} msg %\"{} ({}): {}%\"\n".format(
                                         options.dateview.year,
                                         options.dateview.month,
                                         options.dateview.day,
-                                        options.imdbtt,
-                                        title_added.title.encode("utf_8"))
+                                        title_added.title.encode("utf_8"),
+                                        imdbyear,
+                                        options.imdbtt)
             with open(reminder_file, 'a') as f:
                 f.write(reminder)
 
